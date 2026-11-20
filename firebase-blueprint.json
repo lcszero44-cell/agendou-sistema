@@ -1,0 +1,262 @@
+{
+  "entities": {
+    "AdminLink": {
+      "title": "AdminLink",
+      "description": "Maps a verified Firebase Auth UID to their single owned storeId.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "storeId", "createdAt", "updatedAt"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Public storefront configuration, branding, schedule rules, Pix settings, and message templates.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-z0-9\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "segment": { "type": "string", "enum": ["odontologia", "estetica", "barbearia", "salao", "fisioterapia", "petshop", "personal"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "tagline": { "type": "string", "maxLength": 200 },
+        "heroTitle": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "heroSubtitle": { "type": "string", "maxLength": 400 },
+        "heroImage": { "type": "string", "maxLength": 1000 },
+        "primaryColor": { "type": "string", "maxLength": 16, "pattern": "^#[0-9a-fA-F]{6}$" },
+        "accentColor": { "type": "string", "maxLength": 16, "pattern": "^#[0-9a-fA-F]{6}$" },
+        "whatsapp": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^[0-9]{10,15}$" },
+        "address": { "type": "string", "maxLength": 400 },
+        "mapsQuery": { "type": "string", "maxLength": 400 },
+        "googleReviewUrl": { "type": "string", "maxLength": 1000 },
+        "rating": { "type": "number" },
+        "totalAttendances": { "type": "number" },
+        "showReviews": { "type": "boolean" },
+        "trustBadges": { "type": "array" },
+        "businessHours": { "type": "object" },
+        "holidays": { "type": "array" },
+        "blockedDates": { "type": "array" },
+        "minAdvanceMinutes": { "type": "number" },
+        "slotIntervalMinutes": { "type": "number" },
+        "cancellationPolicy": { "type": "string", "maxLength": 1000 },
+        "arrivalInstructions": { "type": "string", "maxLength": 1000 },
+        "pixKey": { "type": "string", "maxLength": 140 },
+        "pixMerchantName": { "type": "string", "maxLength": 80 },
+        "pixMerchantCity": { "type": "string", "maxLength": 60 },
+        "messageTemplates": { "type": "object" },
+        "faq": { "type": "array" },
+        "reviews": { "type": "array" },
+        "onboardingCompleted": { "type": "boolean" },
+        "dailyReminderTime": { "type": "string", "maxLength": 10 },
+        "automationWebhookUrl": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "slug", "ownerId", "segment", "name", "heroTitle", "primaryColor", "accentColor", "whatsapp", "businessHours", "minAdvanceMinutes", "slotIntervalMinutes", "createdAt", "updatedAt"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Bookable service offering with duration, price, buffer, and optional Pix deposit.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 90 },
+        "description": { "type": "string", "maxLength": 400 },
+        "category": { "type": "string", "maxLength": 60 },
+        "durationMinutes": { "type": "number" },
+        "priceCents": { "type": "number" },
+        "bufferMinutes": { "type": "number" },
+        "requiresDeposit": { "type": "boolean" },
+        "depositAmountCents": { "type": "number" },
+        "returnDays": { "type": "number" },
+        "active": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "name", "durationMinutes", "priceCents", "bufferMinutes", "requiresDeposit", "depositAmountCents", "active", "sortOrder", "createdAt", "updatedAt"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Public professional profile, assigned services, individual schedule, and days off.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "specialty": { "type": "string", "maxLength": 160 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "avatarUrl": { "type": "string", "maxLength": 1000 },
+        "serviceIds": { "type": "array" },
+        "schedule": { "type": "object" },
+        "daysOff": { "type": "array" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "name", "role", "serviceIds", "schedule", "daysOff", "active", "createdAt", "updatedAt"]
+    },
+    "SlotLock": {
+      "title": "SlotLock",
+      "description": "Anonymous time-block reservation lock (no PII) used in Firestore transactions to prevent double bookings.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "staffId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "blockMinute": { "type": "number" },
+        "startMinute": { "type": "number" },
+        "endMinute": { "type": "number" },
+        "appointmentId": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "manageToken": { "type": "string", "minLength": 24, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "releaseToken": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["active", "released"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "staffId", "date", "blockMinute", "startMinute", "endMinute", "appointmentId", "manageToken", "releaseToken", "status", "createdAt", "updatedAt"]
+    },
+    "ClientLock": {
+      "title": "ClientLock",
+      "description": "Anonymous hashed-phone time-block lock (zero PII) preventing the same client from holding overlapping bookings.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientHash": { "type": "string", "minLength": 16, "maxLength": 64, "pattern": "^[a-f0-9]+$" },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "blockMinute": { "type": "number" },
+        "appointmentId": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "manageToken": { "type": "string", "minLength": 24, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "releaseToken": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["active", "released"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "clientHash", "date", "blockMinute", "appointmentId", "manageToken", "releaseToken", "status", "createdAt", "updatedAt"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Private booking record containing client PII; strictly readable only by the store admin.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "storeOwnerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceName": { "type": "string", "minLength": 2, "maxLength": 90 },
+        "staffId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "staffName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "startMinute": { "type": "number" },
+        "endMinute": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "priceCents": { "type": "number" },
+        "depositAmountCents": { "type": "number" },
+        "status": { "type": "string", "enum": ["agendado", "confirmado", "em_atendimento", "concluido", "faltou", "cancelado"] },
+        "clientName": { "type": "string", "minLength": 2, "maxLength": 90 },
+        "clientWhatsapp": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^[0-9]{10,15}$" },
+        "clientEmail": { "type": "string", "maxLength": 120 },
+        "clientNotes": { "type": "string", "maxLength": 400 },
+        "lgpdConsent": { "type": "boolean" },
+        "manageToken": { "type": "string", "minLength": 24, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientAuthToken": { "type": "string", "maxLength": 64 },
+        "blockLockIds": { "type": "array" },
+        "clientBlockLockIds": { "type": "array" },
+        "reminderSentAt": { "type": "string", "maxLength": 40 },
+        "reminderResponse": { "type": "string", "enum": ["", "confirmou", "pediu_remarcar", "sem_resposta"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "storeOwnerId", "serviceId", "serviceName", "staffId", "staffName", "date", "startMinute", "endMinute", "durationMinutes", "priceCents", "depositAmountCents", "status", "clientName", "clientWhatsapp", "lgpdConsent", "manageToken", "clientAuthToken", "blockLockIds", "createdAt", "updatedAt"]
+    },
+    "BookingToken": {
+      "title": "BookingToken",
+      "description": "High-entropy capability document enabling client self-service view/reschedule/cancel without login; list strictly denied.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "appointmentId": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceName": { "type": "string", "minLength": 2, "maxLength": 90 },
+        "staffId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "staffName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "startMinute": { "type": "number" },
+        "endMinute": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "priceCents": { "type": "number" },
+        "depositAmountCents": { "type": "number" },
+        "status": { "type": "string", "enum": ["agendado", "confirmado", "em_atendimento", "concluido", "faltou", "cancelado"] },
+        "clientFirstName": { "type": "string", "minLength": 1, "maxLength": 45 },
+        "blockLockIds": { "type": "array" },
+        "clientBlockLockIds": { "type": "array" },
+        "clientPhoneHash": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "appointmentId", "serviceId", "serviceName", "staffId", "staffName", "date", "startMinute", "endMinute", "durationMinutes", "priceCents", "depositAmountCents", "status", "clientFirstName", "blockLockIds", "createdAt", "updatedAt"]
+    },
+    "WaitlistEntry": {
+      "title": "WaitlistEntry",
+      "description": "Private waitlist request when a client's desired date/slot is full.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "storeOwnerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceName": { "type": "string", "minLength": 2, "maxLength": 90 },
+        "staffId": { "type": "string", "maxLength": 128 },
+        "preferredDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "preferredPeriod": { "type": "string", "enum": ["manha", "tarde", "noite", "qualquer"] },
+        "clientName": { "type": "string", "minLength": 2, "maxLength": 90 },
+        "clientWhatsapp": { "type": "string", "minLength": 10, "maxLength": 20, "pattern": "^[0-9]{10,15}$" },
+        "lgpdConsent": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["aguardando", "notificado", "agendado", "removido"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "storeOwnerId", "serviceId", "serviceName", "preferredDate", "preferredPeriod", "clientName", "clientWhatsapp", "lgpdConsent", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminLink" },
+      "description": "Binds an authorized Firebase Auth user to their single storeId."
+    },
+    "/stores/{storeId}": {
+      "schema": { "$ref": "#/entities/Store" },
+      "description": "Public configuration document for each multi-tenant store."
+    },
+    "/stores/{storeId}/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/Service" },
+      "description": "Public service catalog scoped to storeId."
+    },
+    "/stores/{storeId}/staff/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffMember" },
+      "description": "Public staff profiles and schedules scoped to storeId."
+    },
+    "/stores/{storeId}/slotLocks/{lockId}": {
+      "schema": { "$ref": "#/entities/SlotLock" },
+      "description": "Anonymous time-slot lock blocks preventing double bookings without exposing client PII."
+    },
+    "/stores/{storeId}/clientLocks/{lockId}": {
+      "schema": { "$ref": "#/entities/ClientLock" },
+      "description": "Anonymous hashed-phone time-block locks preventing overlapping bookings by the same client."
+    },
+    "/stores/{storeId}/appointments/{appointmentId}": {
+      "schema": { "$ref": "#/entities/Appointment" },
+      "description": "Private appointments containing customer PII; accessible only by the store admin."
+    },
+    "/stores/{storeId}/bookingTokens/{token}": {
+      "schema": { "$ref": "#/entities/BookingToken" },
+      "description": "Secret capability link allowing clients to view, cancel, or reschedule their own booking without login."
+    },
+    "/stores/{storeId}/waitlist/{entryId}": {
+      "schema": { "$ref": "#/entities/WaitlistEntry" },
+      "description": "Private waitlist entries readable and manageable only by the store admin."
+    }
+  }
+}

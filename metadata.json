@@ -1,0 +1,6 @@
+{
+  "name": "Agendou — Agendamento Online para Serviços",
+  "description": "Sistema completo de agendamento online mobile-first com painel administrativo, gestão de equipe, serviços, Pix copia e cola e integração via WhatsApp para clínicas, salões, barbearias e negócios de serviço no Brasil.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

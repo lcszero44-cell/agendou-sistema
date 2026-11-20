@@ -1,0 +1,588 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isVerifiedSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // LISTA ÚNICA DE E-MAILS AUTORIZADOS (sincronizada com src/config/accessControl.ts)
+    function isAuthorizedAdminEmail() {
+      return isVerifiedSignedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() in [
+          'lucaroch222@gmail.com'
+        ];
+    }
+
+    // Admin autorizado com acesso às lojas existentes (incluindo lojas demo/legadas como clinica-sorriso)
+    function isStoreAdmin(storeId) {
+      return isAuthorizedAdminEmail()
+        && exists(/databases/$(database)/documents/stores/$(storeId));
+    }
+
+    // Admin autorizado ao criar loja + serviços + equipe no mesmo writeBatch
+    function isStoreAdminAfter(storeId) {
+      return isAuthorizedAdminEmail()
+        && existsAfter(/databases/$(database)/documents/stores/$(storeId));
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidAdminLink(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'storeId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'storeId', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == uid && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.storeId is string && data.storeId.size() >= 2 && data.storeId.size() <= 64 && isValidId(data.storeId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStore(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'slug', 'ownerId', 'segment', 'name', 'heroTitle',
+          'primaryColor', 'accentColor', 'whatsapp', 'businessHours',
+          'minAdvanceMinutes', 'slotIntervalMinutes', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'slug', 'ownerId', 'segment', 'name', 'tagline',
+          'heroTitle', 'heroSubtitle', 'heroImage', 'primaryColor', 'accentColor',
+          'whatsapp', 'address', 'mapsQuery', 'googleReviewUrl', 'rating',
+          'totalAttendances', 'showReviews', 'trustBadges', 'businessHours', 'holidays',
+          'blockedDates', 'minAdvanceMinutes', 'slotIntervalMinutes',
+          'cancellationPolicy', 'arrivalInstructions', 'pixKey', 'pixMerchantName',
+          'pixMerchantCity', 'messageTemplates', 'faq', 'reviews',
+          'onboardingCompleted', 'dailyReminderTime', 'automationWebhookUrl',
+          'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() >= 2 && data.storeId.size() <= 64
+        && data.slug is string && data.slug.size() >= 2 && data.slug.size() <= 64 && data.slug.matches('^[a-z0-9\\-]+$')
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.segment is string && data.segment in ['odontologia', 'estetica', 'barbearia', 'salao', 'fisioterapia', 'petshop', 'personal']
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isOptionalString(data, 'tagline', 200)
+        && data.heroTitle is string && data.heroTitle.size() >= 1 && data.heroTitle.size() <= 160
+        && isOptionalString(data, 'heroSubtitle', 400)
+        && isOptionalString(data, 'heroImage', 1000)
+        && data.primaryColor is string && data.primaryColor.size() == 7 && data.primaryColor.matches('^#[0-9a-fA-F]{6}$')
+        && data.accentColor is string && data.accentColor.size() == 7 && data.accentColor.matches('^#[0-9a-fA-F]{6}$')
+        && data.whatsapp is string && data.whatsapp.size() >= 10 && data.whatsapp.size() <= 20 && data.whatsapp.matches('^[0-9]{10,15}$')
+        && isOptionalString(data, 'address', 400)
+        && isOptionalString(data, 'mapsQuery', 400)
+        && isOptionalString(data, 'googleReviewUrl', 1000)
+        && (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5))
+        && (!('totalAttendances' in data) || (data.totalAttendances is number && data.totalAttendances >= 0 && data.totalAttendances <= 10000000))
+        && (!('showReviews' in data) || data.showReviews is bool)
+        && (!('trustBadges' in data) || (data.trustBadges is list && data.trustBadges.size() <= 10 && (data.trustBadges.size() == 0 || (data.trustBadges[0] is string && data.trustBadges[0].size() <= 100))))
+        && data.businessHours is map && data.businessHours.size() <= 7
+        && (!('holidays' in data) || (data.holidays is list && data.holidays.size() <= 100 && (data.holidays.size() == 0 || (data.holidays[0] is string && data.holidays[0].size() == 10))))
+        && (!('blockedDates' in data) || (data.blockedDates is list && data.blockedDates.size() <= 200 && (data.blockedDates.size() == 0 || (data.blockedDates[0] is string && data.blockedDates[0].size() == 10))))
+        && data.minAdvanceMinutes is number && data.minAdvanceMinutes >= 0 && data.minAdvanceMinutes <= 43200
+        && data.slotIntervalMinutes is number && data.slotIntervalMinutes >= 5 && data.slotIntervalMinutes <= 240
+        && isOptionalString(data, 'cancellationPolicy', 1000)
+        && isOptionalString(data, 'arrivalInstructions', 1000)
+        && isOptionalString(data, 'pixKey', 140)
+        && isOptionalString(data, 'pixMerchantName', 80)
+        && isOptionalString(data, 'pixMerchantCity', 60)
+        && (!('messageTemplates' in data) || (data.messageTemplates is map && data.messageTemplates.size() <= 15))
+        && (!('faq' in data) || (data.faq is list && data.faq.size() <= 30 && (data.faq.size() == 0 || data.faq[0] is map)))
+        && (!('reviews' in data) || (data.reviews is list && data.reviews.size() <= 20 && (data.reviews.size() == 0 || data.reviews[0] is map)))
+        && (!('onboardingCompleted' in data) || data.onboardingCompleted is bool)
+        && isOptionalString(data, 'dailyReminderTime', 10)
+        && isOptionalString(data, 'automationWebhookUrl', 1000)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidService(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'name', 'durationMinutes', 'priceCents', 'bufferMinutes',
+          'requiresDeposit', 'depositAmountCents', 'active', 'sortOrder',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'name', 'description', 'category', 'durationMinutes',
+          'priceCents', 'bufferMinutes', 'requiresDeposit', 'depositAmountCents',
+          'returnDays', 'active', 'sortOrder', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 90
+        && isOptionalString(data, 'description', 400)
+        && isOptionalString(data, 'category', 60)
+        && data.durationMinutes is number && data.durationMinutes >= 5 && data.durationMinutes <= 480
+        && data.priceCents is number && data.priceCents >= 0 && data.priceCents <= 10000000
+        && data.bufferMinutes is number && data.bufferMinutes >= 0 && data.bufferMinutes <= 120
+        && data.requiresDeposit is bool
+        && data.depositAmountCents is number && data.depositAmountCents >= 0 && data.depositAmountCents <= 10000000
+        && (!('returnDays' in data) || (data.returnDays is number && data.returnDays >= 0 && data.returnDays <= 730))
+        && data.active is bool
+        && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaff(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'name', 'role', 'serviceIds', 'schedule', 'daysOff',
+          'active', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'name', 'role', 'specialty', 'bio', 'avatarUrl',
+          'serviceIds', 'schedule', 'daysOff', 'active', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.role is string && data.role.size() >= 1 && data.role.size() <= 80
+        && isOptionalString(data, 'specialty', 160)
+        && isOptionalString(data, 'bio', 500)
+        && isOptionalString(data, 'avatarUrl', 1000)
+        && data.serviceIds is list && data.serviceIds.size() <= 100 && (data.serviceIds.size() == 0 || (data.serviceIds[0] is string && data.serviceIds[0].size() <= 128))
+        && data.schedule is map && data.schedule.size() <= 7
+        && data.daysOff is list && data.daysOff.size() <= 200 && (data.daysOff.size() == 0 || (data.daysOff[0] is string && data.daysOff[0].size() == 10))
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSlotLock(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'staffId', 'date', 'blockMinute', 'startMinute', 'endMinute',
+          'appointmentId', 'manageToken', 'releaseToken', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'staffId', 'date', 'blockMinute', 'startMinute', 'endMinute',
+          'appointmentId', 'manageToken', 'releaseToken', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.staffId is string && isValidId(data.staffId)
+        && data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.blockMinute is number && data.blockMinute >= 0 && data.blockMinute < 1440
+        && data.startMinute is number && data.startMinute >= 0 && data.startMinute < 1440
+        && data.endMinute is number && data.endMinute > data.startMinute && data.endMinute <= 1440
+        && data.appointmentId is string && data.appointmentId.size() >= 24 && isValidId(data.appointmentId)
+        && data.manageToken is string && data.manageToken.size() >= 24 && data.manageToken.size() <= 64 && isValidId(data.manageToken)
+        && data.releaseToken is string && data.releaseToken.size() <= 64
+        && data.status is string && data.status in ['active', 'released']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClientLock(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'clientHash', 'date', 'blockMinute', 'appointmentId',
+          'manageToken', 'releaseToken', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'clientHash', 'date', 'blockMinute', 'appointmentId',
+          'manageToken', 'releaseToken', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.clientHash is string && data.clientHash.size() >= 16 && data.clientHash.size() <= 64 && data.clientHash.matches('^[a-f0-9]+$')
+        && data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.blockMinute is number && data.blockMinute >= 0 && data.blockMinute < 1440
+        && data.appointmentId is string && data.appointmentId.size() >= 24 && isValidId(data.appointmentId)
+        && data.manageToken is string && data.manageToken.size() >= 24 && data.manageToken.size() <= 64 && isValidId(data.manageToken)
+        && data.releaseToken is string && data.releaseToken.size() <= 64
+        && data.status is string && data.status in ['active', 'released']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAppointment(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'storeOwnerId', 'serviceId', 'serviceName', 'staffId', 'staffName',
+          'date', 'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+          'depositAmountCents', 'status', 'clientName', 'clientWhatsapp',
+          'lgpdConsent', 'manageToken', 'clientAuthToken', 'blockLockIds', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'storeOwnerId', 'serviceId', 'serviceName', 'staffId', 'staffName',
+          'date', 'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+          'depositAmountCents', 'status', 'clientName', 'clientWhatsapp',
+          'clientEmail', 'clientNotes', 'lgpdConsent', 'manageToken', 'clientAuthToken',
+          'blockLockIds', 'clientBlockLockIds', 'reminderSentAt', 'reminderResponse',
+          'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.storeOwnerId is string && isValidId(data.storeOwnerId)
+        && data.serviceId is string && isValidId(data.serviceId)
+        && data.serviceName is string && data.serviceName.size() >= 1 && data.serviceName.size() <= 90
+        && data.staffId is string && isValidId(data.staffId)
+        && data.staffName is string && data.staffName.size() >= 1 && data.staffName.size() <= 80
+        && data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.startMinute is number && data.startMinute >= 0 && data.startMinute < 1440
+        && data.endMinute is number && data.endMinute > data.startMinute && data.endMinute <= 1440
+        && data.durationMinutes is number && data.durationMinutes >= 5 && data.durationMinutes <= 480
+        && data.priceCents is number && data.priceCents >= 0 && data.priceCents <= 10000000
+        && data.depositAmountCents is number && data.depositAmountCents >= 0 && data.depositAmountCents <= 10000000
+        && data.status is string && data.status in ['agendado', 'confirmado', 'em_atendimento', 'concluido', 'faltou', 'cancelado']
+        && data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 90
+        && data.clientWhatsapp is string && data.clientWhatsapp.size() >= 10 && data.clientWhatsapp.size() <= 20 && data.clientWhatsapp.matches('^[0-9]{10,15}$')
+        && isOptionalString(data, 'clientEmail', 120)
+        && isOptionalString(data, 'clientNotes', 400)
+        && data.lgpdConsent is bool && data.lgpdConsent == true
+        && data.manageToken is string && data.manageToken.size() >= 24 && data.manageToken.size() <= 64 && isValidId(data.manageToken)
+        && data.clientAuthToken is string && data.clientAuthToken.size() <= 64
+        && data.blockLockIds is list && data.blockLockIds.size() >= 1 && data.blockLockIds.size() <= 32 && data.blockLockIds[0] is string && isValidId(data.blockLockIds[0])
+        && (!('clientBlockLockIds' in data) || (data.clientBlockLockIds is list && data.clientBlockLockIds.size() <= 32 && (data.clientBlockLockIds.size() == 0 || (data.clientBlockLockIds[0] is string && isValidId(data.clientBlockLockIds[0])))))
+        && isOptionalString(data, 'reminderSentAt', 40)
+        && (!('reminderResponse' in data) || (data.reminderResponse is string && data.reminderResponse in ['', 'confirmou', 'pediu_remarcar', 'sem_resposta']))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBookingToken(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'appointmentId', 'serviceId', 'serviceName', 'staffId', 'staffName',
+          'date', 'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+          'depositAmountCents', 'status', 'clientFirstName', 'blockLockIds',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'appointmentId', 'serviceId', 'serviceName', 'staffId', 'staffName',
+          'date', 'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+          'depositAmountCents', 'status', 'clientFirstName', 'blockLockIds',
+          'clientBlockLockIds', 'clientPhoneHash', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.appointmentId is string && data.appointmentId.size() >= 24 && isValidId(data.appointmentId)
+        && data.serviceId is string && isValidId(data.serviceId)
+        && data.serviceName is string && data.serviceName.size() >= 1 && data.serviceName.size() <= 90
+        && data.staffId is string && isValidId(data.staffId)
+        && data.staffName is string && data.staffName.size() >= 1 && data.staffName.size() <= 80
+        && data.date is string && data.date.size() == 10 && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.startMinute is number && data.startMinute >= 0 && data.startMinute < 1440
+        && data.endMinute is number && data.endMinute > data.startMinute && data.endMinute <= 1440
+        && data.durationMinutes is number && data.durationMinutes >= 5 && data.durationMinutes <= 480
+        && data.priceCents is number && data.priceCents >= 0 && data.priceCents <= 10000000
+        && data.depositAmountCents is number && data.depositAmountCents >= 0 && data.depositAmountCents <= 10000000
+        && data.status is string && data.status in ['agendado', 'confirmado', 'em_atendimento', 'concluido', 'faltou', 'cancelado']
+        && data.clientFirstName is string && data.clientFirstName.size() >= 1 && data.clientFirstName.size() <= 45
+        && data.blockLockIds is list && data.blockLockIds.size() >= 1 && data.blockLockIds.size() <= 32 && data.blockLockIds[0] is string && isValidId(data.blockLockIds[0])
+        && (!('clientBlockLockIds' in data) || (data.clientBlockLockIds is list && data.clientBlockLockIds.size() <= 32 && (data.clientBlockLockIds.size() == 0 || (data.clientBlockLockIds[0] is string && isValidId(data.clientBlockLockIds[0])))))
+        && isOptionalString(data, 'clientPhoneHash', 64)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWaitlist(data, storeId) {
+      return data.keys().hasAll([
+          'storeId', 'storeOwnerId', 'serviceId', 'serviceName', 'preferredDate',
+          'preferredPeriod', 'clientName', 'clientWhatsapp', 'lgpdConsent',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeId', 'storeOwnerId', 'serviceId', 'serviceName', 'staffId',
+          'preferredDate', 'preferredPeriod', 'clientName', 'clientWhatsapp',
+          'lgpdConsent', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.storeId is string && data.storeId == storeId && data.storeId.size() <= 64
+        && data.storeOwnerId is string && isValidId(data.storeOwnerId)
+        && data.serviceId is string && isValidId(data.serviceId)
+        && data.serviceName is string && data.serviceName.size() >= 1 && data.serviceName.size() <= 90
+        && isOptionalString(data, 'staffId', 128)
+        && data.preferredDate is string && data.preferredDate.size() == 10 && data.preferredDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.preferredPeriod is string && data.preferredPeriod in ['manha', 'tarde', 'noite', 'qualquer']
+        && data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 90
+        && data.clientWhatsapp is string && data.clientWhatsapp.size() >= 10 && data.clientWhatsapp.size() <= 20 && data.clientWhatsapp.matches('^[0-9]{10,15}$')
+        && data.lgpdConsent is bool && data.lgpdConsent == true
+        && data.status is string && data.status in ['aguardando', 'notificado', 'agendado', 'removido']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && isAuthorizedAdminEmail() && request.auth.uid == uid;
+      allow list: if isAuthorizedAdminEmail() && resource.data.uid == request.auth.uid;
+      allow create: if isValidId(uid)
+        && isAuthorizedAdminEmail()
+        && isValidAdminLink(incoming(), uid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && request.auth.uid == uid
+        && existsAfter(/databases/$(database)/documents/stores/$(incoming().storeId));
+      allow update: if isValidId(uid)
+        && isAuthorizedAdminEmail()
+        && isValidAdminLink(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.auth.uid == uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['storeId', 'updatedAt'])
+        && exists(/databases/$(database)/documents/stores/$(incoming().storeId));
+      allow delete: if false;
+    }
+
+    match /stores/{storeId} {
+      allow get: if isValidId(storeId);
+      allow list: if isAuthorizedAdminEmail()
+        && (
+          resource.data.ownerId == request.auth.uid
+          || resource.data.ownerId == 'demo-owner'
+          || resource.data.storeId in ['clinica-sorriso', 'barbearia-navalha']
+        );
+      allow create: if isValidId(storeId)
+        && isAuthorizedAdminEmail()
+        && isValidStore(incoming(), storeId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(storeId)
+        && isAuthorizedAdminEmail()
+        && isValidStore(incoming(), storeId)
+        && incoming().storeId == existing().storeId
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'slug', 'segment', 'tagline', 'heroTitle', 'heroSubtitle',
+          'heroImage', 'primaryColor', 'accentColor', 'whatsapp', 'address',
+          'mapsQuery', 'googleReviewUrl', 'rating', 'totalAttendances',
+          'showReviews', 'trustBadges', 'businessHours', 'holidays', 'blockedDates',
+          'minAdvanceMinutes', 'slotIntervalMinutes', 'cancellationPolicy',
+          'arrivalInstructions', 'pixKey', 'pixMerchantName', 'pixMerchantCity',
+          'messageTemplates', 'faq', 'reviews', 'onboardingCompleted',
+          'dailyReminderTime', 'automationWebhookUrl', 'updatedAt'
+        ]);
+      allow delete: if isValidId(storeId) && isStoreAdmin(storeId);
+
+      match /services/{serviceId} {
+        allow get: if isValidId(storeId) && isValidId(serviceId);
+        allow list: if isValidId(storeId) && resource.data.storeId == storeId;
+        allow create: if isValidId(storeId) && isValidId(serviceId)
+          && isStoreAdminAfter(storeId)
+          && isValidService(incoming(), storeId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(storeId) && isValidId(serviceId)
+          && isStoreAdmin(storeId)
+          && isValidService(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'description', 'category', 'durationMinutes', 'priceCents',
+            'bufferMinutes', 'requiresDeposit', 'depositAmountCents', 'returnDays',
+            'active', 'sortOrder', 'updatedAt'
+          ]);
+        allow delete: if isValidId(storeId) && isValidId(serviceId) && isStoreAdmin(storeId);
+      }
+
+      match /staff/{staffId} {
+        allow get: if isValidId(storeId) && isValidId(staffId);
+        allow list: if isValidId(storeId) && resource.data.storeId == storeId;
+        allow create: if isValidId(storeId) && isValidId(staffId)
+          && isStoreAdminAfter(storeId)
+          && isValidStaff(incoming(), storeId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(storeId) && isValidId(staffId)
+          && isStoreAdmin(storeId)
+          && isValidStaff(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'role', 'specialty', 'bio', 'avatarUrl', 'serviceIds',
+            'schedule', 'daysOff', 'active', 'updatedAt'
+          ]);
+        allow delete: if isValidId(storeId) && isValidId(staffId) && isStoreAdmin(storeId);
+      }
+
+      match /slotLocks/{lockId} {
+        allow get: if isValidId(storeId) && isValidId(lockId);
+        allow list: if isValidId(storeId) && resource.data.storeId == storeId;
+        allow create: if isValidId(storeId) && isValidId(lockId)
+          && isValidSlotLock(incoming(), storeId)
+          && incoming().status == 'active'
+          && incoming().releaseToken == ''
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/stores/$(storeId))
+          && existsAfter(/databases/$(database)/documents/stores/$(storeId)/appointments/$(incoming().appointmentId));
+        allow update: if isValidId(storeId) && isValidId(lockId)
+          && isValidSlotLock(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isStoreAdmin(storeId) ||
+            (existing().status == 'active'
+              && existing().releaseToken == ''
+              && incoming().status == 'released'
+              && incoming().releaseToken == existing().manageToken
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'releaseToken', 'updatedAt'])) ||
+            (existing().status == 'released'
+              && incoming().status == 'active'
+              && incoming().releaseToken == ''
+              && existsAfter(/databases/$(database)/documents/stores/$(storeId)/appointments/$(incoming().appointmentId))
+              && incoming().diff(existing()).affectedKeys().hasOnly(['appointmentId', 'manageToken', 'releaseToken', 'startMinute', 'endMinute', 'status', 'updatedAt']))
+          );
+        allow delete: if isValidId(storeId) && isValidId(lockId) && isStoreAdmin(storeId);
+      }
+
+      match /clientLocks/{lockId} {
+        // Zero PII (SHA-256 hash only). Single-doc get only for atomic conflict check; list denied.
+        allow list: if false;
+        allow get: if isValidId(storeId) && isValidId(lockId);
+        allow create: if isValidId(storeId) && isValidId(lockId)
+          && isValidClientLock(incoming(), storeId)
+          && incoming().status == 'active'
+          && incoming().releaseToken == ''
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/stores/$(storeId))
+          && existsAfter(/databases/$(database)/documents/stores/$(storeId)/appointments/$(incoming().appointmentId));
+        allow update: if isValidId(storeId) && isValidId(lockId)
+          && isValidClientLock(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isStoreAdmin(storeId) ||
+            (existing().status == 'active'
+              && existing().releaseToken == ''
+              && incoming().status == 'released'
+              && incoming().releaseToken == existing().manageToken
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'releaseToken', 'updatedAt'])) ||
+            (existing().status == 'released'
+              && incoming().status == 'active'
+              && incoming().releaseToken == ''
+              && existsAfter(/databases/$(database)/documents/stores/$(storeId)/appointments/$(incoming().appointmentId))
+              && incoming().diff(existing()).affectedKeys().hasOnly(['appointmentId', 'manageToken', 'releaseToken', 'status', 'updatedAt']))
+          );
+        allow delete: if isValidId(storeId) && isValidId(lockId) && isStoreAdmin(storeId);
+      }
+
+      match /appointments/{appointmentId} {
+        allow get: if isValidId(storeId) && isValidId(appointmentId) && isStoreAdmin(storeId);
+        allow list: if isValidId(storeId)
+          && isAuthorizedAdminEmail()
+          && resource.data.storeId == storeId;
+        allow create: if isValidId(storeId) && isValidId(appointmentId) && appointmentId.size() >= 24
+          && isValidAppointment(incoming(), storeId)
+          && incoming().clientAuthToken == ''
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (isStoreAdmin(storeId) || incoming().status == 'agendado')
+          && exists(/databases/$(database)/documents/stores/$(storeId))
+          && incoming().storeOwnerId == get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId
+          && exists(/databases/$(database)/documents/stores/$(storeId)/services/$(incoming().serviceId))
+          && exists(/databases/$(database)/documents/stores/$(storeId)/staff/$(incoming().staffId))
+          && existsAfter(/databases/$(database)/documents/stores/$(storeId)/slotLocks/$(incoming().blockLockIds[0]));
+        allow update: if isValidId(storeId) && isValidId(appointmentId)
+          && isValidAppointment(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().storeOwnerId == existing().storeOwnerId
+          && incoming().manageToken == existing().manageToken
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (isStoreAdmin(storeId) && incoming().diff(existing()).affectedKeys().hasOnly([
+              'serviceId', 'serviceName', 'staffId', 'staffName', 'date',
+              'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+              'depositAmountCents', 'status', 'clientName', 'clientWhatsapp',
+              'clientEmail', 'clientNotes', 'blockLockIds',
+              'clientBlockLockIds', 'reminderSentAt', 'reminderResponse', 'updatedAt'
+            ])) ||
+            (appointmentId.size() >= 24
+              && existing().status in ['agendado', 'confirmado']
+              && incoming().status == 'cancelado'
+              && incoming().clientAuthToken == existing().manageToken
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'clientAuthToken', 'updatedAt'])) ||
+            (appointmentId.size() >= 24
+              && existing().status in ['agendado', 'confirmado']
+              && incoming().status == 'agendado'
+              && incoming().clientAuthToken == existing().manageToken
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'date', 'startMinute', 'endMinute', 'staffId', 'staffName', 'blockLockIds',
+                'clientBlockLockIds', 'status', 'clientAuthToken', 'updatedAt'
+              ])
+              && existsAfter(/databases/$(database)/documents/stores/$(storeId)/slotLocks/$(incoming().blockLockIds[0])))
+          );
+        allow delete: if isValidId(storeId) && isValidId(appointmentId) && isStoreAdmin(storeId);
+      }
+
+      match /bookingTokens/{token} {
+        allow list: if false;
+        allow get: if isValidId(storeId) && isValidId(token) && token.size() >= 24;
+        allow create: if isValidId(storeId) && isValidId(token) && token.size() >= 24
+          && isValidBookingToken(incoming(), storeId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && existsAfter(/databases/$(database)/documents/stores/$(storeId)/appointments/$(incoming().appointmentId));
+        allow update: if isValidId(storeId) && isValidId(token) && token.size() >= 24
+          && isValidBookingToken(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().appointmentId == existing().appointmentId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (isStoreAdmin(storeId) && incoming().diff(existing()).affectedKeys().hasOnly([
+              'serviceId', 'serviceName', 'staffId', 'staffName', 'date',
+              'startMinute', 'endMinute', 'durationMinutes', 'priceCents',
+              'depositAmountCents', 'status', 'blockLockIds', 'clientBlockLockIds', 'updatedAt'
+            ])) ||
+            (existing().status in ['agendado', 'confirmado']
+              && incoming().status == 'cancelado'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+            (existing().status in ['agendado', 'confirmado']
+              && incoming().status == 'agendado'
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'date', 'startMinute', 'endMinute', 'staffId', 'staffName',
+                'blockLockIds', 'clientBlockLockIds', 'status', 'updatedAt'
+              ]))
+          );
+        allow delete: if isValidId(storeId) && isValidId(token) && isStoreAdmin(storeId);
+      }
+
+      match /waitlist/{entryId} {
+        allow get: if isValidId(storeId) && isValidId(entryId) && isStoreAdmin(storeId);
+        allow list: if isValidId(storeId)
+          && isAuthorizedAdminEmail()
+          && resource.data.storeId == storeId;
+        allow create: if isValidId(storeId) && isValidId(entryId)
+          && isValidWaitlist(incoming(), storeId)
+          && incoming().status == 'aguardando'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/stores/$(storeId))
+          && incoming().storeOwnerId == get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId;
+        allow update: if isValidId(storeId) && isValidId(entryId)
+          && isValidWaitlist(incoming(), storeId)
+          && incoming().storeId == existing().storeId
+          && incoming().storeOwnerId == existing().storeOwnerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isStoreAdmin(storeId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+        allow delete: if isValidId(storeId) && isValidId(entryId) && isStoreAdmin(storeId);
+      }
+    }
+  }
+}
